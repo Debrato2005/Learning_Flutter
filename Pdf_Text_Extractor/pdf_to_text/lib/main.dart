@@ -1,51 +1,48 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
-import 'package:pdf_text/pdf_text.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 void main() {
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: PDFTextExtractorApp(),
-  ));
+  runApp(MaterialApp(home: PdfTextExtractorPage()));
 }
 
-class PDFTextExtractorApp extends StatefulWidget {
-  const PDFTextExtractorApp({super.key});
-
+class PdfTextExtractorPage extends StatefulWidget {
   @override
-  State<PDFTextExtractorApp> createState() => _PDFTextExtractorAppState();
+  _PdfTextExtractorPageState createState() => _PdfTextExtractorPageState();
 }
 
-class _PDFTextExtractorAppState extends State<PDFTextExtractorApp> {
-  String extractedText = 'No PDF selected yet.';
+class _PdfTextExtractorPageState extends State<PdfTextExtractorPage> {
+  String? extractedText;
+  bool loading = false;
 
-  Future<void> pickAndExtractText() async {
+  Future<void> pickPdfAndExtractText() async {
+    setState(() {
+      loading = true;
+      extractedText = null;
+    });
+
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
 
     if (result != null && result.files.single.path != null) {
-      File file = File(result.files.single.path!);
+      final path = result.files.single.path!;
+      final bytes = File(path).readAsBytesSync();
 
-      try {
-        PDFDoc doc = await PDFDoc.fromFile(file);
-        String text = await doc.text;
+      PdfDocument document = PdfDocument(inputBytes: bytes);
+      PdfTextExtractor extractor = PdfTextExtractor(document);
+      String text = extractor.extractText();
+      document.dispose();
 
-        setState(() {
-          extractedText = text.isEmpty
-              ? 'No extractable text found in this PDF.'
-              : text;
-        });
-      } catch (e) {
-        setState(() {
-          extractedText = 'Error reading PDF: $e';
-        });
-      }
+      setState(() {
+        extractedText = text;
+        loading = false;
+      });
     } else {
       setState(() {
-        extractedText = 'No file picked.';
+        loading = false;
       });
     }
   }
@@ -53,26 +50,19 @@ class _PDFTextExtractorAppState extends State<PDFTextExtractorApp> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('PDF Text Extractor')),
+      appBar: AppBar(title: Text('PDF Text Extractor')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            ElevatedButton(
-              onPressed: pickAndExtractText,
-              child: const Text('Pick PDF & Extract Text'),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Text(
-                  extractedText,
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
+        padding: const EdgeInsets.all(12),
+        child: loading
+            ? Center(child: CircularProgressIndicator())
+            : extractedText != null
+                ? SingleChildScrollView(child: Text(extractedText!))
+                : Center(child: Text('Pick a PDF to extract text')),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: pickPdfAndExtractText,
+        tooltip: 'Pick PDF',
+        child: Icon(Icons.picture_as_pdf),
       ),
     );
   }
